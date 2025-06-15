@@ -1,24 +1,51 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './AuthContext';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, Outlet } from 'react-router-dom';
+import { AuthProvider, useAuth } from './AuthContext';
 import LoginPage from './LoginPage';
 import DashboardPage from './DashboardPage';
 import ProtectedRoute from './ProtectedRoute';
+import ProjectDetailPage from './ProjectDetailPage'; // 新しいページをインポート
+
+// --- メインレイアウトコンポーネント ---
+const MainLayout = () => {
+  const { logout } = useAuth();
+  return (
+    <div style={{ display: 'flex', height: '100vh' }}>
+      <nav style={{ width: '200px', background: '#f4f4f4', padding: '20px', borderRight: '1px solid #ddd' }}>
+        <h2 style={{ marginTop: 0 }}>MOTK</h2>
+        <ul style={{ listStyle: 'none', padding: 0 }}>
+          <li style={{ marginBottom: '10px' }}>
+            <Link to="/dashboard">Projects</Link>
+          </li>
+        </ul>
+        <button onClick={logout} style={{ position: 'absolute', bottom: '20px' }}>Logout</button>
+      </nav>
+      <main style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
+        <Outlet />
+      </main>
+    </div>
+  );
+};
+
 
 function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="container">
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route element={<ProtectedRoute />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          
+          <Route element={<ProtectedRoute />}>
+            <Route element={<MainLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
+              {/* 新しいルートを追加 */}
+              <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
             </Route>
-            {/* デフォルトルートを/dashboardにリダイレクト */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </div>
+          </Route>
+          
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
       </Router>
     </AuthProvider>
   );

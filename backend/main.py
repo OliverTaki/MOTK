@@ -37,7 +37,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Pydantic Schemas ---
+# --- Pydantic Schemas (正しいフォーマットに修正) ---
 
 class Token(BaseModel):
     access_token: str
@@ -76,7 +76,6 @@ class ProjectMemberBase(BaseModel):
     role: str = "Member"
 
 class ProjectMemberCreate(ProjectMemberBase):
-    project_id: int
     account_id: Optional[int] = None
 
 class ProjectMember(ProjectMemberBase):
@@ -98,6 +97,8 @@ class ProjectDetails(ProjectBase):
     organization_id: int
     status: str
     members: List[ProjectMember] = []
+    shots: List["Shot"] = []
+    assets: List["Asset"] = []
     class Config:
         from_attributes = True
 
@@ -160,8 +161,6 @@ class Task(TaskBase):
 def read_root():
     return {"message": "MOTK Backend is running with Project-level Access Control!"}
 
-# (以下、エンドポイントのコードは変更なし...省略)
-# ... (以前のバージョンのエンドポイントコードをここにペースト) ...
 @app.post("/token", response_model=Token, tags=["Authentication"])
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     account = db.query(DBAccount).filter(DBAccount.account_name == form_data.username).first()
@@ -215,19 +214,23 @@ def create_project(project: ProjectCreate, db: Session = Depends(get_db), curren
 
 @app.get("/projects/", response_model=List[ProjectList], tags=["Projects"])
 def get_projects(db: Session = Depends(get_db), current_account: DBAccount = Depends(auth.get_current_active_account)):
-    if current_account.account_type == 'admin':
+    if current_account.account_type in ['admin', 'manager']:
         return db.query(DBProject).filter(DBProject.organization_id == current_account.organization_id).all()
     return db.query(DBProject).join(DBProjectMember).filter(DBProjectMember.account_id == current_account.id).all()
 
 @app.get("/projects/{project_id}", response_model=ProjectDetails, tags=["Projects"])
-def get_project_details(project_id: int, account: DBAccount = Depends(auth.require_project_membership), db: Session = Depends(get_db)):
-    project = db.query(DBProject).filter(DBProject.id == project_id).options(joinedload(DBProject.members).joinedload(DBProjectMember.account)).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+def get_project_details(project: DBProject = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
+    # 権限チェックとデータ取得は依存関係が全て行う
+    # この関数は、取得したデータを返すだけ
+    # 関連データを確実に読み込むために、ここで再度読み込みオプションを追加
+    return db.query(DBProject).filter(DBProject.id == project.id).options(
+        joinedload(DBProject.members).joinedload(DBProjectMember.account),
+        joinedload(DBProject.shots),
+        joinedload(DBProject.assets)
+    ).one()
 
 @app.post("/projects/{project_id}/members", response_model=ProjectMember, tags=["Project Members"])
-def create_project_member(project_id: int, member_data: ProjectMemberBase, account: DBAccount = Depends(auth.require_project_membership), db: Session = Depends(get_db)):
+def create_project_member(project_id: int, member_data: ProjectMemberBase, account: DBAccount = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
     db_member = DBProjectMember(**member_data.model_dump(), project_id=project_id)
     db.add(db_member)
     db.commit()
@@ -235,7 +238,7 @@ def create_project_member(project_id: int, member_data: ProjectMemberBase, accou
     return db_member
 
 @app.post("/projects/{project_id}/shots", response_model=Shot, tags=["Shots & Assets"])
-def create_shot(project_id: int, shot_data: ShotCreate, account: DBAccount = Depends(auth.require_project_membership), db: Session = Depends(get_db)):
+def create_shot(project_id: int, shot_data: ShotCreate, account: DBAccount = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
     db_shot = DBShot(**shot_data.model_dump(), project_id=project_id)
     db.add(db_shot)
     db.commit()
@@ -243,7 +246,7 @@ def create_shot(project_id: int, shot_data: ShotCreate, account: DBAccount = Dep
     return db_shot
 
 @app.post("/projects/{project_id}/assets", response_model=Asset, tags=["Shots & Assets"])
-def create_asset(project_id: int, asset_data: AssetCreate, account: DBAccount = Depends(auth.require_project_membership), db: Session = Depends(get_db)):
+def create_asset(project_id: int, asset_data: AssetCreate, account: DBAccount = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
     db_asset = DBAsset(**asset_data.model_dump(), project_id=project_id)
     db.add(db_asset)
     db.commit()
