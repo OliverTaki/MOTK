@@ -1,1 +1,178 @@
-MOTK - Production Management System: Comprehensive Design & Architecture DocumentVersion: 2.0 (Last Updated: 2025-06-15)This document serves as the canonical source of truth for the MOTK project. It details the vision, architectural decisions, technical specifications, and—crucially—the evolutionary context that shaped them. It is intended to be a living document, providing maximum context for all current and future contributors, both human and AI.1. Core Vision & Guiding Principles1.1. The GoalMOTK aims to be a highly customizable, open-source production management system tailored for the demanding workflows of VFX, animation, and game development studios. The primary objective is to create a central hub that rivals the functionality of industry standards like Autodesk ShotGrid but offers superior flexibility, a more intuitive UI, and is built on a modern, manageable tech stack (Python/FastAPI, TypeScript/React, PostgreSQL). The system must serve as the "heart" of production, centralizing information on projects, assets, shots, tasks, media, and personnel to optimize scheduling, quality, and resource allocation.1.2. Key Design PrinciplesOur development process has been shaped by direct experience and iterative refinement. The following principles, forged through extensive discussion and debugging, are paramount:Clarity over Complexity ("No Useless Things"): This is our most important mantra. We must aggressively avoid adding unnecessary database tables, entities, or layers of abstraction if a simpler model can achieve the desired workflow. Every new component must justify its existence.Separation of Concerns (Backend as the Fortress): The Backend API is the single source of truth for all business logic and, critically, security. The Frontend's role is to present data and provide a user interface. Sensitive information (e.g., budgets, salaries, performance reviews) must be filtered at the API level, not merely hidden in the UI. The API must be robust enough to support multiple, diverse frontends (e.g., a manager's dashboard, an artist's to-do list, an admin's configuration panel).Pragmatic Evolution (Build, Then Polish): We will start with a simple, solid, and functional foundation and add complexity in later phases. It is profoundly easier to add features to a working system than to fix an overly complex, broken one. This principle guides our decisions to postpone complex features like user-generated Custom Fields and to adopt a simple multi-tenancy model at the outset.Workflow-Driven Design: The system's architecture must reflect the real-world, often non-linear, workflows of creative production. This was the driving force behind the decision to decouple project "roles" from specific "people," allowing for planning and task assignment before staff are finalized.2. Architectural Evolution & Final DecisionsThis section documents the journey of our key design decisions. The rationale behind rejecting certain paths is as important as the final choice.2.1. The "User" Problem: A Design Journey to SimplicityThe most critical and illustrative design evolution concerned the concept of a "user" and their assignment to tasks. This journey perfectly encapsulates our core principles.Initial State (The "Standard" Model): The system began with a conventional schema: an Account table (for login) linked one-to-one with a User table (for metadata), which in turn belonged to an Organization. This is a common but rigid pattern that proved ill-suited for our needs.Problem Statement: A global, organization-wide User list is inefficient and unrealistic for project-based creative work. A supervisor needs to plan a project by assigning tasks to roles (e.g., "Lead Modeler," "FX Artist #2") long before the actual people filling those roles are hired or assigned. This led to the key requirement: "First, assign necessary roles within a project, and link actual people (accounts) to those roles later."Iteration 1 (Rejected): The ProjectAssignment Model.Idea: To solve the problem, we considered introducing a new ProjectAssignment table to act as a bridge, linking a global User to a Task.Flaw & User Insight: This solution was correctly identified as still being too complex. It retained the cumbersome global User table. The user provided a critical insight: "I don't want to add useless things. Maybe we can just rename the User entity?" This prompted a fundamental re-evaluation.Iteration 2 (Refined): Distinguishing Account Type vs. Role.Idea: The next breakthrough was a conceptual one, driven by another key user insight: "Don't confuse Account Type and Role. They are different things and it's important to separate these easily-confused elements."Conceptual Shift: We defined that an Account has a system-level permission (account_type like 'admin', 'artist') that dictates what they can do in the system. A project, however, has contextual roles (role like 'Director', 'Animator') that define a person's function or credit within that specific production.Final Decision (Adopted): Abolish the Global User Table.The Breakthrough: The final, simplest, and most powerful solution came from the user's ultimate realization: "The User is an entity within the project, so we don't need to manage it as a list, right?" This was the answer.Final Architecture: We decided to completely eliminate the global User table. This removes a full layer of abstraction and dramatically simplifies the model.An Account (a real person with a password) logs into the system.A new ProjectMember entity is created. This represents a "role" or "slot" that exists only within a specific project.An Account can be optionally linked to a ProjectMember to formally take on that role.Benefits: This architecture directly enables the desired workflow. It simplifies the database. It provides a crystal-clear foundation for access control. And as a powerful side-effect, it allows for the automatic generation of a project's staff credit roll directly from the ProjectMember list.2.2. Audit Logs: Balancing Detail and PerformanceRequirement: An admin needs to track changes for accountability and debugging.Challenge: The user astutely pointed out the risk of data bloat: "Will logging everything make the data too heavy?" Logging every single read operation would indeed cause massive database bloat.Decision: A hybrid approach was chosen for a balance of detail and performance.Short-Term Log (ActivityLog table): For high-granularity tracking, a dedicated ActivityLog table will be created. It will record all change events (create, update, delete) and potentially critical read events. To manage size, records in this table will be automatically purged after a short, configurable period (e.g., one week).Permanent Log (created_by/updated_by): For permanent, low-overhead traceability, all key tables will include created_by_account_id and updated_by_account_id columns. This ensures we always know who created a record and who last touched it, without storing every intermediate state.2.3. Multi-Tenancy & Access Control: A Pragmatic StartRequirement: The system must support multiple, fully isolated organizations.Challenge: True multi-tenant architectures (e.g., separate schemas or databases per organization) are extremely complex.Decision: We will adopt the "A案 (Simple Plan)" for our initial implementation."1 Account = 1 Organization". The database schema will enforce a direct, one-to-many relationship where an Account belongs to a single Organization. This is achieved by adding an organization_id foreign key directly to the Account table.This model dramatically simplifies initial development. If a user needs to work across multiple organizations, they will create separate accounts, with the long-term vision of a UI-level account switcher (similar to Google or Slack).2.4. Custom Fields: A Deliberately Postponed GoalRequirement: The ability to dynamically add new data fields (e.g., a "priority" list, a "budget" currency field) from the UI is a critical long-term goal for the system's flexibility.Challenge: This is arguably one of the most complex features to implement correctly, with deep implications for database performance, API design, and UI complexity. An early, naive implementation would be detrimental.Decision: To ensure a stable and functional core product, the implementation of Custom Fields will be postponed. However, the architectural design will remain mindful of this future requirement, leaving room for extension, likely via PostgreSQL's JSONB data type, which avoids the major performance pitfalls of traditional EAV models.3. The Final Blueprint: Database SchemaThis schema is the direct result of the decisions documented above.users table: DELETED. This is a core design decision.accounts table:id: Primary Keyorganization_id: (FK to organizations) - Implements the simple multi-tenancy model.account_name: (String, Unique)hashed_password: (String)account_type: (String, e.g., 'admin', 'manager', 'artist', 'client') - Defines system-wide permissions.created_at, updated_atproject_members table (NEW):id: Primary Keyproject_id: (FK to projects) - Ties this role to a single project.account_id: (Nullable FK to accounts) - The optional link to a real person.department: (String, e.g., 'CG', 'Production', 'VFX') - For grouping and credits.role: (String, e.g., 'Director', 'Lead Animator', 'Client') - The specific job title or function.created_at, updated_attasks table (MODIFIED):id: Primary Key... (other task-specific fields like name, status, start_date, etc.)assigned_to_id: (FK to project_members.id) - Now assigns to a role, not a person.created_at, updated_atOther core tables (organizations, projects, shots, assets, etc.): Will also include created_at, updated_at fields for auditing.4. Development Chronicle & Debugging LogThe path to a stable development environment was non-trivial. This log documents the key technical hurdles and their resolutions, providing critical context for future environment setup or troubleshooting.Alembic Migration Saga:Initial Error: No 'script_location' key found. Cause: Running alembic from the project root (/MOTK) instead of the directory containing alembic.ini (/MOTK/backend). Resolution: Always run alembic commands from within the /backend directory.Second Error: Target database is not up to date. Cause: A mismatch between the actual database schema and Alembic's revision history, likely from a previous failed migration.Third Error: psycopg2.errors.DuplicateTable on alembic upgrade head. Cause: Analysis of the logs revealed that the auto-generated migration files had their dependencies (down_revision) reversed, causing Alembic to try and apply them in the wrong order.Final Resolution: The only clean path forward was to treat the migration history as corrupted. The solution was: 1) Delete all files within alembic/versions/. 2) Drop and recreate the PostgreSQL database to ensure it was truly empty. 3) Generate a single, new "initial" migration file from the final, correct models. 4) Apply this single migration with alembic upgrade head.Uvicorn Server Startup:Error 1: ModuleNotFoundError: No module named 'backend'. Cause: Running uvicorn backend.main:app from within the /backend directory. Python could not find a module named backend inside itself. Resolution: The startup command must be run from the project root (/MOTK).Error 2: ModuleNotFoundError: No module named 'database'. Cause: When running from the root, backend/main.py could no longer find its sibling database.py. Resolution: Change the import statement in main.py to use a relative import: from .database import .... This tells Python to look in the current directory for the module.GitHub Setup & Authentication:Error 1: remote: Support for password authentication was removed. Cause: GitHub now requires tokens for command-line operations. Resolution: Created a Personal Access Token (PAT) with repo scope on the GitHub website and used it in place of the password.Error 2: error: RPC failed; HTTP 400. Cause: Attempting to push the entire project, including the massive venv virtual environment folder. Resolution: Created a comprehensive .gitignore file to exclude venv, node_modules, __pycache__, and other unnecessary files.History Cleanup: To remove an accidentally committed file (directory0613.txt) from the repository's history, a git commit --amend followed by a git push --force was used to cleanly rewrite the initial commit.5. Immediate Roadmap: Phase 1 (Foundation)With the architecture defined and the environment stabilized, the following are the immediate next steps:DB Schema Refresh: Implement the "Final Blueprint" schema. This will involve:Modifying backend/database.py to delete the User model, add the ProjectMember model, and update the Account and Task models.Generating a new, clean Alembic migration file that reflects these changes.Applying this migration to the database.Authentication API:Create endpoints for Account registration and login (/auth/register, /auth/token).The login endpoint will validate credentials and return a JWT (JSON Web Token).Implement FastAPI dependencies that verify the JWT on protected routes.Basic Access Control:Create a dependency that extracts the account_id and account_type from the JWT.Start protecting POST/PUT/DELETE endpoints, initially checking if account_type is 'admin' or 'manager'.Modify GET endpoints to begin filtering results based on the account's project memberships.6. Technical StackBackend: Python 3.12+, FastAPI, SQLAlchemy 2.0+Frontend: TypeScript, ReactDatabase: PostgreSQL 14+Dependency Management: venv / pip (Backend), npm (Frontend)Version Control: Git / GitHub
+# MOTK – Production Management System
+
+*Comprehensive Design & Architecture*
+
+**Version 2.0 – Last updated 2025‑06‑15**
+
+---
+
+## Table of Contents
+
+* [1. Core Vision & Guiding Principles](#1-core-vision--guiding-principles)
+
+  * [1.1 The Goal](#11-the-goal)
+  * [1.2 Key Design Principles](#12-key-design-principles)
+* [2. Architectural Evolution & Final Decisions](#2-architectural-evolution--final-decisions)
+
+  * [2.1 The "User" Problem: A Design Journey to Simplicity](#21-the-user-problem-a-design-journey-to-simplicity)
+  * [2.2 Audit Logs: Balancing Detail and Performance](#22-audit-logs-balancing-detail-and-performance)
+  * [2.3 Multi‑Tenancy & Access Control: A Pragmatic Start](#23-multi-tenancy--access-control-a-pragmatic-start)
+  * [2.4 Custom Fields: A Deliberately Postponed Goal](#24-custom-fields-a-deliberately-postponed-goal)
+* [3. The Final Blueprint: Database Schema](#3-the-final-blueprint-database-schema)
+* [4. Development Chronicle & Debugging Log](#4-development-chronicle--debugging-log)
+* [5. Immediate Roadmap: Phase 1 (Foundation)](#5-immediate-roadmap-phase-1-foundation)
+* [6. Technical Stack](#6-technical-stack)
+
+---
+
+## 1. Core Vision & Guiding Principles
+
+### 1.1 The Goal
+
+MOTK aims to be a **highly customizable, open‑source production management system** tailored for the demanding workflows of VFX, animation, and game‑development studios. The objective is to create a central hub that rivals Autodesk ShotGrid but with:
+
+* **Superior flexibility**
+* **More intuitive UI**
+* **Modern, maintainable tech stack** (Python / FastAPI, TypeScript / React, PostgreSQL)
+
+MOTK must serve as the *heart* of production, centralizing data on projects, assets, shots, tasks, media, and personnel to optimize scheduling, quality, and resource allocation.
+
+### 1.2 Key Design Principles
+
+These principles were forged through extensive discussion, direct experience, and iterative refinement:
+
+1. **Clarity over Complexity – “No Useless Things”**
+   Avoid adding database tables, entities, or abstractions unless they clearly improve workflow.
+2. **Separation of Concerns – Backend as the Fortress**
+   Backend API holds all business logic and security. Frontend only presents data.
+3. **Pragmatic Evolution – Build, Then Polish**
+   Start with a simple, solid foundation; add complexity later.
+4. **Workflow‑Driven Design**
+   Architecture must match real‑world, non‑linear creative workflows (e.g., planning roles before hiring people).
+
+---
+
+## 2. Architectural Evolution & Final Decisions
+
+### 2.1 The "User" Problem: A Design Journey to Simplicity
+
+| Stage                                                                                                                                | Idea / Action                                                                            | Outcome                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| **Initial State**                                                                                                                    | Conventional schema: `Account ➜ User ➜ Organization`.                                    | Too rigid for project‑based work.                            |
+| **Problem**                                                                                                                          | Need to assign tasks to *roles* (e.g., “Lead Modeler”) before actual people are hired.   | —                                                            |
+| **Iteration 1 (Rejected)**                                                                                                           | Introduce `ProjectAssignment` bridge table (`User ↔ Task`).                              | Still required global `User` table → unnecessary complexity. |
+| **Iteration 2 (Refined)**                                                                                                            | Separate **Account Type** (system permission) from **Role** (project context).           | Conceptual clarity improved, but complexity remained.        |
+| **Final Decision (Adopted)**                                                                                                         | **Abolish global `User` table**.                                                         |                                                              |
+| `Account` (real person) logs in → creates a `ProjectMember` **role/slot** within a project, optionally linked back to the `Account`. | Dramatically simplified model; enables planning before staffing; auto‑generates credits. |                                                              |
+
+### 2.2 Audit Logs: Balancing Detail and Performance
+
+* **Requirement:** Track changes for accountability/debugging.
+* **Challenge:** Logging every read/write risks database bloat.
+* **Decision:** Hybrid approach—
+
+  * `ActivityLog` table for high‑granularity changes, auto‑purged (e.g., after 1 week).
+  * `created_by` / `updated_by` columns on core tables for permanent low‑overhead traceability.
+
+### 2.3 Multi‑Tenancy & Access Control: A Pragmatic Start
+
+* **Requirement:** Support multiple, isolated organizations.
+* **Decision:** *Simple Plan A* – `Account` belongs to one `Organization` (`organization_id` FK).
+  Users working across companies create separate accounts; future UI switcher planned.
+
+### 2.4 Custom Fields: A Deliberately Postponed Goal
+
+* Critical for long‑term flexibility but **postponed** to keep core stable.
+* Future‑proof design will likely exploit PostgreSQL `JSONB`, avoiding classic EAV pitfalls.
+
+---
+
+## 3. The Final Blueprint: Database Schema
+
+```text
+accounts
+└─ id (PK, UUID auto‑gen)
+   organization_id (FK)
+   account_name (unique, login identifier)
+   display_name (String)  # human‑readable name for UI
+   hashed_password
+   account_type (admin | manager | artist | client)
+   created_at, updated_at
+
+project_members  (NEW)
+└─ id (PK, UUID auto‑gen)
+   project_id (FK projects)
+   account_id  (nullable FK accounts)
+   display_name (String, e.g., "John Doe")
+   department  (e.g., "CG", "Production")
+   role        (e.g., "Director", "Lead Animator")
+   created_at, updated_at
+
+tasks  (MODIFIED)
+└─ id (PK, UUID auto‑gen)
+   … task‑specific columns …
+   assigned_to_id (FK project_members)
+   created_at, updated_at
+
+# Note: global `users` table was **deleted** by design.
+```
+
+> **ID Generation:** Primary keys (`id`) are auto‑generated UUIDs. **Business rule:** uniqueness is required *only inside each `organization_id`*. UUIDs naturally exceed this requirement (virtually zero collision risk) and make merging data across orgs safe; however, you could also switch to simpler per‑org sequences later if desired.
+
+**Display Name:** `display_name` is the *only* human‑readable field required at creation time (`Account.display_name`, `ProjectMember.display_name`). All other metadata (department, role, permissions, etc.) can be filled in later without breaking references.:\*\* `display_name` provides a user‑friendly label for UI and can be the only required human input at project creation; other metadata can be populated later.:\*\* `display_name` provides a user‑friendly label for UI and can be the only required human input at project creation; other metadata can be populated later.
+
+```
+All other tables (`organizations`, `projects`, `shots`, `assets`, …) include standard timestamp and audit columns.
+
+---
+
+## 4. Development Chronicle & Debugging Log
+
+### 4.1 Alembic Migration Saga
+| Issue | Cause | Resolution |
+|-------|-------|------------|
+| *No 'script_location' key found* | Running Alembic from project root | Run inside `/backend` |
+| *Target DB not up to date* | Schema ↔ migration mismatch | Purge bad migrations, reset DB |
+| *psycopg2.errors.DuplicateTable* | Reversed `down_revision` chain | Delete `alembic/versions`, recreate single “initial” migration |
+
+### 4.2 Uvicorn Startup
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `ModuleNotFoundError: backend` | Ran `uvicorn backend.main:app` *inside* `/backend` | Run from project root |
+| `ModuleNotFoundError: database` | Relative imports missing | Use `from .database import …` |
+
+### 4.3 GitHub Authentication
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Password auth removed | GitHub PAT required | Generate PAT w/ `repo` scope |
+| `RPC failed; HTTP 400` | Pushing enormous `venv` folder | Add proper `.gitignore` |
+
+### 4.4 History Cleanup
+- Used `git commit --amend` + `git push --force` to remove `directory0613.txt` from history.
+
+---
+
+## 5. Immediate Roadmap: Phase 1 (Foundation)
+1. **DB Schema Refresh**  
+   - Implement blueprint, generate clean Alembic migration.
+2. **Authentication API**  
+   - `/auth/register`, `/auth/token` (JWT).
+3. **Basic Access Control**  
+   - JWT‑based dependency; protect mutating endpoints.
+4. **Backend → Frontend Hello‑World**  
+   - FastAPI endpoint + React fetch to validate stack.
+
+---
+
+## 6. Technical Stack
+- **Backend:** Python 3.12 + FastAPI, SQLAlchemy 2.x
+- **Frontend:** TypeScript, React (Vite or Next.js)
+- **Database:** PostgreSQL 14+
+- **Dependency Mgmt:** `venv` / `pip` (backend), `npm` (frontend)
+- **Version Control:** Git / GitHub
+
+---
+
+*End of document – all original content preserved, reformatted for readability.*
+
+```
