@@ -1,8 +1,8 @@
-"""Create initial database schema from final models
+"""Implement final design with ProjectMember and remove User
 
-Revision ID: 9ae6cff75bd8
+Revision ID: 5de2bd590cd7
 Revises: 
-Create Date: 2025-06-13 16:44:48.536153
+Create Date: 2025-06-15 20:31:01.249251
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '9ae6cff75bd8'
+revision: str = '5de2bd590cd7'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -39,6 +39,18 @@ def upgrade() -> None:
     sa.UniqueConstraint('name')
     )
     op.create_index(op.f('ix_storage_locations_id'), 'storage_locations', ['id'], unique=False)
+    op.create_table('accounts',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('account_name', sa.String(), nullable=False),
+    sa.Column('display_name', sa.String(), nullable=False),
+    sa.Column('hashed_password', sa.String(), nullable=False),
+    sa.Column('account_type', sa.String(), nullable=False),
+    sa.Column('organization_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_accounts_account_name'), 'accounts', ['account_name'], unique=True)
+    op.create_index(op.f('ix_accounts_id'), 'accounts', ['id'], unique=False)
     op.create_table('projects',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
@@ -49,29 +61,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_projects_id'), 'projects', ['id'], unique=False)
     op.create_index(op.f('ix_projects_name'), 'projects', ['name'], unique=False)
-    op.create_table('users',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('username', sa.String(), nullable=False),
-    sa.Column('email', sa.String(), nullable=False),
-    sa.Column('role', sa.String(), nullable=True),
-    sa.Column('organization_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('email')
-    )
-    op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
-    op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
-    op.create_table('accounts',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('account_name', sa.String(), nullable=False),
-    sa.Column('hashed_password', sa.String(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('user_id')
-    )
-    op.create_index(op.f('ix_accounts_account_name'), 'accounts', ['account_name'], unique=True)
-    op.create_index(op.f('ix_accounts_id'), 'accounts', ['id'], unique=False)
     op.create_table('assets',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
@@ -83,6 +72,18 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_assets_id'), 'assets', ['id'], unique=False)
     op.create_index(op.f('ix_assets_name'), 'assets', ['name'], unique=False)
+    op.create_table('project_members',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('department', sa.String(), nullable=True),
+    sa.Column('role', sa.String(), nullable=False),
+    sa.Column('display_name', sa.String(), nullable=False),
+    sa.Column('project_id', sa.Integer(), nullable=False),
+    sa.Column('account_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['account_id'], ['accounts.id'], ),
+    sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_project_members_id'), 'project_members', ['id'], unique=False)
     op.create_table('shots',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
@@ -95,17 +96,12 @@ def upgrade() -> None:
     op.create_index(op.f('ix_shots_name'), 'shots', ['name'], unique=False)
     op.create_table('files',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('file_id', sa.String(), nullable=False, comment="UUID of the file's folder"),
+    sa.Column('file_id', sa.String(), nullable=False),
     sa.Column('original_filename', sa.String(), nullable=False),
-    sa.Column('relative_path', sa.String(), nullable=False, comment='Relative path within the storage_folder_uuid directory'),
-    sa.Column('full_storage_path', sa.String(), nullable=False, comment='Absolute path resolved by application'),
-    sa.Column('file_format', sa.String(), nullable=False, comment='e.g., mov, mp4, exr, jpg, pdf'),
-    sa.Column('file_type', sa.String(), nullable=False, comment='e.g., video, image, 3d_model, document, unknown'),
-    sa.Column('fps', sa.Float(), nullable=True),
-    sa.Column('total_frames', sa.Integer(), nullable=True),
-    sa.Column('duration_seconds', sa.Float(), nullable=True),
-    sa.Column('width', sa.Integer(), nullable=True),
-    sa.Column('height', sa.Integer(), nullable=True),
+    sa.Column('relative_path', sa.String(), nullable=False),
+    sa.Column('full_storage_path', sa.String(), nullable=False),
+    sa.Column('file_format', sa.String(), nullable=False),
+    sa.Column('file_type', sa.String(), nullable=False),
     sa.Column('storage_location_id', sa.Integer(), nullable=False),
     sa.Column('project_id', sa.Integer(), nullable=False),
     sa.Column('shot_id', sa.Integer(), nullable=True),
@@ -128,7 +124,7 @@ def upgrade() -> None:
     sa.Column('shot_id', sa.Integer(), nullable=True),
     sa.Column('asset_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['asset_id'], ['assets.id'], ),
-    sa.ForeignKeyConstraint(['assigned_to_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['assigned_to_id'], ['project_members.id'], ),
     sa.ForeignKeyConstraint(['shot_id'], ['shots.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -138,8 +134,7 @@ def upgrade() -> None:
     sa.Column('dependency_on_task_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['dependency_on_task_id'], ['tasks.id'], ),
     sa.ForeignKeyConstraint(['dependent_task_id'], ['tasks.id'], ),
-    sa.PrimaryKeyConstraint('dependent_task_id', 'dependency_on_task_id'),
-    sa.UniqueConstraint('dependent_task_id', 'dependency_on_task_id', name='uq_task_dependency')
+    sa.PrimaryKeyConstraint('dependent_task_id', 'dependency_on_task_id')
     )
     # ### end Alembic commands ###
 
@@ -155,18 +150,17 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_shots_name'), table_name='shots')
     op.drop_index(op.f('ix_shots_id'), table_name='shots')
     op.drop_table('shots')
+    op.drop_index(op.f('ix_project_members_id'), table_name='project_members')
+    op.drop_table('project_members')
     op.drop_index(op.f('ix_assets_name'), table_name='assets')
     op.drop_index(op.f('ix_assets_id'), table_name='assets')
     op.drop_table('assets')
-    op.drop_index(op.f('ix_accounts_id'), table_name='accounts')
-    op.drop_index(op.f('ix_accounts_account_name'), table_name='accounts')
-    op.drop_table('accounts')
-    op.drop_index(op.f('ix_users_username'), table_name='users')
-    op.drop_index(op.f('ix_users_id'), table_name='users')
-    op.drop_table('users')
     op.drop_index(op.f('ix_projects_name'), table_name='projects')
     op.drop_index(op.f('ix_projects_id'), table_name='projects')
     op.drop_table('projects')
+    op.drop_index(op.f('ix_accounts_id'), table_name='accounts')
+    op.drop_index(op.f('ix_accounts_account_name'), table_name='accounts')
+    op.drop_table('accounts')
     op.drop_index(op.f('ix_storage_locations_id'), table_name='storage_locations')
     op.drop_table('storage_locations')
     op.drop_index(op.f('ix_organizations_name'), table_name='organizations')
