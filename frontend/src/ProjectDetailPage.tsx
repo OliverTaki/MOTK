@@ -2,8 +2,7 @@ import React, { useState, useEffect, useCallback, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import apiClient from './api';
 
-// --- AG Gridのインポート ---
-// モジュール登録はagGridSetup.tsで行うので、ここでは不要
+// AG Gridのインポート
 import { AgGridReact } from 'ag-grid-react';
 import { ColDef } from 'ag-grid-community';
 
@@ -37,23 +36,12 @@ const ProjectDetailPage = () => {
 
     // --- AG Gridの列定義 ---
     const defaultColDef: ColDef = {
-        sortable: true,
-        filter: true,
-        resizable: true,
-        floatingFilter: true,
+        sortable: true, filter: true, resizable: true, floatingFilter: true,
     };
-    const [shotColDefs] = useState<ColDef[]>([
-        { field: 'id', width: 100 }, { field: 'name', flex: 1 }, { field: 'status', width: 150 }
-    ]);
-    const [assetColDefs] = useState<ColDef[]>([
-        { field: 'id', width: 100 }, { field: 'name', flex: 1 }, { field: 'asset_type', width: 180 }, { field: 'status', width: 150 }
-    ]);
-    const [taskColDefs] = useState<ColDef[]>([
-        { field: 'id', width: 100 }, { field: 'name', flex: 1 }, { field: 'status', width: 150 }, { field: 'assigned_to.display_name', headerName: 'Assigned To', flex: 1 }
-    ]);
-    const [memberColDefs] = useState<ColDef[]>([
-        { field: 'display_name', headerName: 'Name', flex: 1 }, { field: 'department', width: 180 }, { field: 'role', width: 180 }, { field: 'account.display_name', headerName: 'Linked Account', flex: 1, valueFormatter: p => p.value || 'N/A' }
-    ]);
+    const [shotColDefs] = useState<ColDef[]>([ { field: 'id', width: 100 }, { field: 'name', flex: 1 }, { field: 'status', width: 150 } ]);
+    const [assetColDefs] = useState<ColDef[]>([ { field: 'id', width: 100 }, { field: 'name', flex: 1 }, { field: 'asset_type', width: 180 }, { field: 'status', width: 150 } ]);
+    const [taskColDefs] = useState<ColDef[]>([ { field: 'id', width: 100 }, { field: 'name', flex: 1 }, { field: 'status', width: 150 }, { field: 'assigned_to.display_name', headerName: 'Assigned To', flex: 1 } ]);
+    const [memberColDefs] = useState<ColDef[]>([ { field: 'display_name', headerName: 'Name', flex: 1 }, { field: 'department', width: 180 }, { field: 'role', width: 180 }, { field: 'account.display_name', headerName: 'Linked Account', flex: 1, valueFormatter: p => p.value || 'N/A' } ]);
 
     const fetchProjectData = useCallback(async () => {
         if (!projectId) return;
@@ -78,11 +66,7 @@ const ProjectDetailPage = () => {
 
     const renderGrid = (rowData: any[], columnDefs: ColDef[]) => (
         <div className="ag-theme-alpine" style={{ height: '100%', width: '100%' }}>
-            <AgGridReact
-                rowData={rowData}
-                columnDefs={columnDefs}
-                defaultColDef={defaultColDef}
-            />
+            <AgGridReact rowData={rowData} columnDefs={columnDefs} defaultColDef={defaultColDef} />
         </div>
     );
 

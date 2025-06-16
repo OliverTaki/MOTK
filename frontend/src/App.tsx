@@ -1,5 +1,3 @@
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-alpine.css';
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -8,11 +6,11 @@ import DashboardPage from './DashboardPage';
 import ProtectedRoute from './ProtectedRoute';
 import ProjectDetailPage from './ProjectDetailPage';
 
-// AG Gridのスタイルシートのみをここに残します
+// AG Gridのスタイルシートをアプリケーションのトップレベルでインポートします
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
-// メインレイアウトコンポーネント (変更なし)
+// メインレイアウトコンポーネント
 const MainLayout = () => {
   const { logout } = useAuth();
   return (
@@ -24,12 +22,14 @@ const MainLayout = () => {
         </ul>
         <button onClick={logout} style={{ position: 'absolute', bottom: '20px' }}>Logout</button>
       </nav>
-      <main style={{ flex: 1, padding: '20px', overflowY: 'auto' }}><Outlet /></main>
+      <main style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
+        <Outlet />
+      </main>
     </div>
   );
 };
 
-// Appコンポーネント (変更なし)
+// Appコンポーネント
 function App() {
   return (
     <AuthProvider>

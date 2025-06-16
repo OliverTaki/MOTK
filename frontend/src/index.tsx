@@ -1,12 +1,13 @@
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-alpine.css';
-import './agGridSetup';   // ★ 最上行に
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+
+// --- AG Grid設定ファイルを最初にインポートします ---
+// これにより、Appコンポーネントが読み込まれる前に、AG Gridの機能が登録されます。
+import './agGridSetup'; 
+
 import App from './App';
-ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 
-
+// --- アプリケーションを一度だけ呼び出す、正しい記述です ---
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
