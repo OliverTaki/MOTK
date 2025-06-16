@@ -4,7 +4,11 @@ import { AuthProvider, useAuth } from './AuthContext';
 import LoginPage from './LoginPage';
 import DashboardPage from './DashboardPage';
 import ProtectedRoute from './ProtectedRoute';
-import ProjectDetailPage from './ProjectDetailPage'; // 新しいページをインポート
+import ProjectDetailPage from './ProjectDetailPage';
+
+// --- AG Gridのスタイルシートをインポート ---
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 // --- メインレイアウトコンポーネント ---
 const MainLayout = () => {
@@ -38,7 +42,6 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
-              {/* 新しいルートを追加 */}
               <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
             </Route>
           </Route>

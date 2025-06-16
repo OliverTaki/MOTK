@@ -159,7 +159,7 @@ class Task(TaskBase):
 
 @app.get("/", tags=["Root"])
 def read_root():
-    return {"message": "MOTK Backend is running with Project-level Access Control!"}
+    return {"message": "MOTK Backend is running with robust access control!"}
 
 @app.post("/token", response_model=Token, tags=["Authentication"])
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -220,9 +220,6 @@ def get_projects(db: Session = Depends(get_db), current_account: DBAccount = Dep
 
 @app.get("/projects/{project_id}", response_model=ProjectDetails, tags=["Projects"])
 def get_project_details(project: DBProject = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
-    # 権限チェックとデータ取得は依存関係が全て行う
-    # この関数は、取得したデータを返すだけ
-    # 関連データを確実に読み込むために、ここで再度読み込みオプションを追加
     return db.query(DBProject).filter(DBProject.id == project.id).options(
         joinedload(DBProject.members).joinedload(DBProjectMember.account),
         joinedload(DBProject.shots),
@@ -230,25 +227,67 @@ def get_project_details(project: DBProject = Depends(auth.get_project_from_path)
     ).one()
 
 @app.post("/projects/{project_id}/members", response_model=ProjectMember, tags=["Project Members"])
-def create_project_member(project_id: int, member_data: ProjectMemberBase, account: DBAccount = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
-    db_member = DBProjectMember(**member_data.model_dump(), project_id=project_id)
+def create_project_member(member_data: ProjectMemberCreate, project: DBProject = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
+    db_member = DBProjectMember(**member_data.model_dump(), project_id=project.id)
     db.add(db_member)
     db.commit()
     db.refresh(db_member)
     return db_member
 
 @app.post("/projects/{project_id}/shots", response_model=Shot, tags=["Shots & Assets"])
-def create_shot(project_id: int, shot_data: ShotCreate, account: DBAccount = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
-    db_shot = DBShot(**shot_data.model_dump(), project_id=project_id)
+def create_shot(shot_data: ShotCreate, project: DBProject = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
+    db_shot = DBShot(**shot_data.model_dump(), project_id=project.id)
     db.add(db_shot)
     db.commit()
     db.refresh(db_shot)
     return db_shot
 
 @app.post("/projects/{project_id}/assets", response_model=Asset, tags=["Shots & Assets"])
-def create_asset(project_id: int, asset_data: AssetCreate, account: DBAccount = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
-    db_asset = DBAsset(**asset_data.model_dump(), project_id=project_id)
+def create_asset(asset_data: AssetCreate, project: DBProject = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
+    db_asset = DBAsset(**asset_data.model_dump(), project_id=project.id)
     db.add(db_asset)
     db.commit()
     db.refresh(db_asset)
     return db_asset
+
+@app.post("/tasks/", response_model=Task, tags=["Tasks"])
+def create_task(task: TaskCreate, db: Session = Depends(get_db), current_account: DBAccount = Depends(auth.get_current_active_account)):
+    member = db.query(DBProjectMember).filter(DBProjectMember.id == task.assigned_to_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Assigned ProjectMember not found")
+    
+    try:
+        auth.get_project_from_path(project_id=member.project_id, current_account=current_account, db=db)
+    except HTTPException:
+        raise HTTPException(status_code=403, detail="You are not authorized to add tasks to this project.")
+
+    parent_project_id = None
+    if task.shot_id:
+        shot = db.query(DBShot).filter(DBShot.id == task.shot_id).first()
+        if not shot: raise HTTPException(status_code=404, detail="Shot not found")
+        parent_project_id = shot.project_id
+    elif task.asset_id:
+        asset = db.query(DBAsset).filter(DBAsset.id == task.asset_id).first()
+        if not asset: raise HTTPException(status_code=404, detail="Asset not found")
+        parent_project_id = asset.project_id
+    else:
+        raise HTTPException(status_code=400, detail="Task must be linked to a Shot or an Asset.")
+    
+    if member.project_id != parent_project_id:
+        raise HTTPException(status_code=400, detail="Cannot assign a task to a member from a different project.")
+    
+    db_task = DBTask(**task.model_dump())
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
+    return db_task
+
+@app.get("/tasks/project/{project_id}", response_model=List[Task], tags=["Tasks"])
+def get_tasks_for_project(project: DBProject = Depends(auth.get_project_from_path), db: Session = Depends(get_db)):
+    tasks_in_shots = db.query(DBTask).join(DBShot).filter(DBShot.project_id == project.id)
+    tasks_in_assets = db.query(DBTask).join(DBAsset).filter(DBAsset.project_id == project.id)
+    
+    all_tasks_query = tasks_in_shots.union(tasks_in_assets)
+    return db.query(DBTask).from_statement(all_tasks_query).options(
+        joinedload(DBTask.assigned_to).joinedload(DBProjectMember.account)
+    ).all()
