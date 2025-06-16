@@ -2,16 +2,10 @@ import React, { useState, useEffect, useCallback, ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import apiClient from './api';
 
-// --- AG Gridのインポートとモジュール登録 (Community版のみ使用) ---
+// --- AG Gridのインポート ---
+// モジュール登録はagGridSetup.tsで行うので、ここでは不要
 import { AgGridReact } from 'ag-grid-react';
-import { ModuleRegistry } from '@ag-grid-community/core';
-import { ClientSideRowModelModule } from '@ag-grid-community/client-side-row-model';
 import { ColDef } from 'ag-grid-community';
-
-// 必要なCommunity版モジュールのみを登録
-ModuleRegistry.registerModules([
-  ClientSideRowModelModule,
-]);
 
 // --- 型定義 ---
 interface Account { id: number; display_name: string; }
@@ -46,7 +40,7 @@ const ProjectDetailPage = () => {
         sortable: true,
         filter: true,
         resizable: true,
-        floatingFilter: true, // 各列の下にフィルター入力欄を表示
+        floatingFilter: true,
     };
     const [shotColDefs] = useState<ColDef[]>([
         { field: 'id', width: 100 }, { field: 'name', flex: 1 }, { field: 'status', width: 150 }
@@ -83,15 +77,11 @@ const ProjectDetailPage = () => {
     }, [fetchProjectData]);
 
     const renderGrid = (rowData: any[], columnDefs: ColDef[]) => (
-        // --- 修正点 ---
-        // 高さを親要素の100%にすることで、flexboxが計算したサイズを正しく利用する
         <div className="ag-theme-alpine" style={{ height: '100%', width: '100%' }}>
             <AgGridReact
                 rowData={rowData}
                 columnDefs={columnDefs}
                 defaultColDef={defaultColDef}
-                rowSelection="multiple"
-                animateRows={true}
             />
         </div>
     );
@@ -111,8 +101,6 @@ const ProjectDetailPage = () => {
                 <TabButton onClick={() => setActiveTab('members')} isActive={activeTab === 'members'}>Members ({project.members.length})</TabButton>
             </div>
 
-            {/* --- 修正点 --- */}
-            {/* このコンテナが残りのスペースを全て使うようにする (flex: 1) */}
             <div style={{ flex: 1, paddingTop: '20px' }}>
                 {activeTab === 'shots' && renderGrid(project.shots, shotColDefs)}
                 {activeTab === 'assets' && renderGrid(project.assets, assetColDefs)}
