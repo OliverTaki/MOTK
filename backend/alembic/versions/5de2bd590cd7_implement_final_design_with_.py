@@ -138,6 +138,112 @@ def upgrade() -> None:
     )
     # ### end Alembic commands ###
 
+    # ### BEGIN CUSTOM DATA SEEDING ###
+    # This section inserts default data into the newly created tables.
+    from sqlalchemy.sql import table, column
+    from sqlalchemy import String, Integer
+    from passlib.context import CryptContext
+
+    # Password hashing context
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    
+    # --- 1. Organization ---
+    organizations_table = table('organizations',
+        column('id', Integer),
+        column('name', String),
+        column('status', String)
+    )
+    op.bulk_insert(organizations_table,
+        [{'id': 1, 'name': 'Default Org', 'status': 'active'}]
+    )
+
+    # --- 2. Account (with user-specified credentials) ---
+    accounts_table = table('accounts',
+        column('id', Integer),
+        column('account_name', String),
+        column('display_name', String),
+        column('hashed_password', String),
+        column('account_type', String),
+        column('organization_id', Integer)
+    )
+    op.bulk_insert(accounts_table,
+        [{
+            'id': 1,
+            'account_name': 'admin_user',
+            'display_name': 'Admin User',
+            'hashed_password': pwd_context.hash("password_admin"),
+            'account_type': 'admin',
+            'organization_id': 1
+        }]
+    )
+
+    # --- 3. Project ---
+    projects_table = table('projects',
+        column('id', Integer),
+        column('name', String),
+        column('status', String),
+        column('organization_id', Integer)
+    )
+    op.bulk_insert(projects_table,
+        [{'id': 1, 'name': 'Sample Project', 'status': 'active', 'organization_id': 1}]
+    )
+
+    # --- 4. Project Members ---
+    project_members_table = table('project_members',
+        column('id', Integer),
+        column('department', String),
+        column('role', String),
+        column('display_name', String),
+        column('project_id', Integer),
+        column('account_id', Integer)
+    )
+    op.bulk_insert(project_members_table,
+        [
+            {'id': 1, 'department': 'Production', 'role': 'Admin', 'display_name': 'Admin User', 'project_id': 1, 'account_id': 1},
+            {'id': 2, 'department': 'Animation', 'role': 'Animator', 'display_name': 'Animator 1', 'project_id': 1, 'account_id': None}
+        ]
+    )
+
+    # --- 5. Shot ---
+    shots_table = table('shots',
+        column('id', Integer),
+        column('name', String),
+        column('status', String),
+        column('project_id', Integer)
+    )
+    op.bulk_insert(shots_table,
+        [{'id': 1, 'name': 'SH001', 'status': 'pending', 'project_id': 1}]
+    )
+
+    # --- 6. Asset ---
+    assets_table = table('assets',
+        column('id', Integer),
+        column('name', String),
+        column('asset_type', String),
+        column('status', String),
+        column('project_id', Integer)
+    )
+    op.bulk_insert(assets_table,
+        [{'id': 1, 'name': 'Main Character', 'asset_type': 'character', 'status': 'pending', 'project_id': 1}]
+    )
+
+    # --- 7. Tasks ---
+    tasks_table = table('tasks',
+        column('id', Integer),
+        column('name', String),
+        column('status', String),
+        column('assigned_to_id', Integer),
+        column('shot_id', Integer),
+        column('asset_id', Integer),
+    )
+    op.bulk_insert(tasks_table,
+        [
+            {'id': 1, 'name': 'Model Character', 'status': 'todo', 'assigned_to_id': 2, 'shot_id': None, 'asset_id': 1},
+            {'id': 2, 'name': 'Animate Scene', 'status': 'todo', 'assigned_to_id': 2, 'shot_id': 1, 'asset_id': None},
+        ]
+    )
+    # ### END CUSTOM DATA SEEDING ###
+
 
 def downgrade() -> None:
     """Downgrade schema."""
